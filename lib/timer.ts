@@ -20,6 +20,16 @@ export function elapsedMinutes(timer: RunningTimer, now: Date): number {
   return durationMinutesBetween(timer.startedAt, now);
 }
 
+/** Whole seconds elapsed on a running timer (for the live clock). */
+export function elapsedSeconds(timer: RunningTimer, now: Date): number {
+  const start = new Date(timer.startedAt).getTime();
+  const end = now.getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  const diff = end - start;
+  if (diff <= 0) return 0;
+  return Math.floor(diff / 1000);
+}
+
 export type StopTimerResult = {
   entries: TimeEntry[];
   timer: null;

@@ -36,6 +36,26 @@ export function formatDuration(minutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/**
+ * Formats a whole number of seconds as a clock (`"05:30"` under an hour,
+ * `"1:05:30"` otherwise). Used by the live timer display.
+ */
+export function formatClock(totalSeconds: number): string {
+  const safe =
+    Number.isFinite(totalSeconds) && totalSeconds > 0
+      ? Math.floor(totalSeconds)
+      : 0;
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  if (hours === 0) return `${pad(minutes)}:${pad(seconds)}`;
+  return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+}
+
 /** Decimal hours, rounded to two decimals, for chart axes. */
 export function minutesToHours(minutes: number): number {
   const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;

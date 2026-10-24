@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AppDataProvider } from "../components/AppDataProvider";
-import { Nav } from "../components/Nav";
+import { AppShell } from "../components/AppShell";
+import { SettingsProvider } from "../components/SettingsProvider";
+import { ThemeProvider } from "../components/theme-provider";
+import { Toaster } from "../components/ui/sonner";
 import { cn } from "@/lib/utils";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
-
 const geistSans = Geist({
-  variable: "--font-geist-sans",
+  variable: "--font-sans",
   subsets: ["latin"],
 });
 
@@ -27,13 +28,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable)}
+      suppressHydrationWarning
+      className={cn(
+        "h-full",
+        "antialiased",
+        geistSans.variable,
+        geistMono.variable,
+        "font-sans",
+      )}
     >
-      <body className="min-h-full flex flex-col">
-        <AppDataProvider>
-          <Nav />
-          <main className="mx-auto w-full max-w-4xl flex-1 p-4">{children}</main>
-        </AppDataProvider>
+      <body className="min-h-full bg-background text-foreground">
+        <ThemeProvider>
+          <SettingsProvider>
+            <AppDataProvider>
+              <AppShell>{children}</AppShell>
+            </AppDataProvider>
+          </SettingsProvider>
+          <Toaster position="bottom-center" />
+        </ThemeProvider>
       </body>
     </html>
   );

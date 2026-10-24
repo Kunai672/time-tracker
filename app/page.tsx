@@ -3,67 +3,142 @@
 import Link from "next/link";
 
 import { useAppData } from "../components/AppDataProvider";
-import { TimerPanel } from "../components/TimerPanel";
+import { CategoryChart } from "../components/CategoryChart";
+import { DailyChart } from "../components/DailyChart";
+import { StatCards, StatCardsSkeleton } from "../components/StatCards";
+import { TimerCard } from "../components/TimerCard";
+import { aggregateByCategory, aggregateByDay } from "../lib/aggregate";
+import { Skeleton } from "../components/ui/skeleton";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import { findCategory } from "../lib/categories";
-import { totalMinutes } from "../lib/aggregate";
-import { sortEntriesNewestFirst } from "../lib/entries";
 import { formatDuration } from "../lib/duration";
+import { sortEntriesNewestFirst } from "../lib/entries";
+import { computeDashboardStats } from "../lib/stats";
+import { useNowSeconds } from "../components/useNow";
 
-export default function DashboardPage() {
-  const { data, ready } = useAppData();
-
-  const total = totalMinutes(data.entries);
+function RecentEntries() {
+  const { data } = useAppData();
   const recent = sortEntriesNewestFirst(data.entries).slice(0, 5);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Time Tracker</h1>
-
-      <TimerPanel />
-
-      <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded border p-4">
-          <h2 className="text-sm text-gray-500">Total tracked</h2>
-          <p className="text-2xl font-semibold">{formatDuration(total)}</p>
-        </div>
-        <div className="rounded border p-4">
-          <h2 className="text-sm text-gray-500">Entries</h2>
-          <p className="text-2xl font-semibold">{data.entries.length}</p>
-        </div>
-      </section>
-
-      <section aria-labelledby="recent-heading" className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 id="recent-heading" className="text-xl font-semibold">
-            Recent entries
-          </h2>
-          <Link href="/entries" className="text-sm text-indigo-600 hover:underline">
-            View all
-          </Link>
-        </div>
-        {!ready ? (
-          <p className="text-sm text-gray-500">Loading…</p>
-        ) : recent.length === 0 ? (
-          <p className="text-sm text-gray-500">No entries yet.</p>
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-2">
+        <CardTitle>Recent entries</CardTitle>
+        <Link
+          href="/entries"
+          className="rounded text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          View all
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {recent.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No entries yet. Start a timer to see it here.
+          </p>
         ) : (
-          <ul className="divide-y">
-            {recent.map((entry) => (
-              <li key={entry.id} className="flex justify-between py-2 text-sm">
-                <span>
-                  {entry.description}
-                  <span className="ml-2 text-gray-500">
-                    {findCategory(data.categories, entry.categoryId)?.name ??
-                      "Uncategorized"}
+          <ul className="divide-y divide-border">
+            {recent.map((entry) => {
+              const category = findCategory(data.categories, entry.categoryId);
+              return (
+                <li
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: category?.color }}
+                      aria-hidden
+                    />
+                    <span className="truncate">{entry.description}</span>
+                    <span className="hidden shrink-0 text-muted-foreground sm:inline">
+                      {category?.name ?? "Uncategorized"}
+                    </span>
                   </span>
-                </span>
-                <span className="tabular-nums">
-                  {formatDuration(entry.durationMinutes)}
-                </span>
-              </li>
-            ))}
+                  <span className="shrink-0 tabular-nums">
+                    {formatDuration(entry.durationMinutes)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
-      </section>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function DashboardPage() {
+  const { data, ready } = useAppData();
+  const seconds = useNowSeconds(ready);
+  const now = seconds !== null ? new Date(seconds * 1000) : null;
+
+  const stats = now
+    ? computeDashboardStats(data.entries, data.categories, now)
+    : null;
+  const daily = now ? aggregateByDay(data.entries) : [];
+  const byCategory = now
+    ? aggregateByCategory(data.entries, data.categories)
+    : [];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          Dashboard
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Track your time and review how the week is going.
+        </p>
+      </div>
+
+      {!ready || !now || !stats ? (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-36" />
+            </CardContent>
+          </Card>
+          <StatCardsSkeleton />
+        </div>
+      ) : (
+        <>
+          <TimerCard />
+          <StatCards stats={stats} />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Hours per day</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DailyChart data={daily} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Time per category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CategoryChart data={byCategory} />
+              </CardContent>
+            </Card>
+          </div>
+
+          <RecentEntries />
+        </>
+      )}
     </div>
   );
 }

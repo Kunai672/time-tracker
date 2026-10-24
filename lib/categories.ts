@@ -55,6 +55,23 @@ export function recolorCategory(
   );
 }
 
+/** How many entries would be reassigned if this category were deleted. */
+export function countEntriesForCategory(
+  entries: TimeEntry[],
+  id: string,
+): number {
+  return entries.reduce(
+    (count, entry) => (entry.categoryId === id ? count + 1 : count),
+    0,
+  );
+}
+
+/** Sentence shown in the delete-confirmation dialog. */
+export function deleteCategoryMessage(entryCount: number): string {
+  const noun = entryCount === 1 ? "1 entry" : `${entryCount} entries`;
+  return `${noun} will move to Uncategorized.`;
+}
+
 export type DeleteCategoryResult = {
   categories: Category[];
   entries: TimeEntry[];

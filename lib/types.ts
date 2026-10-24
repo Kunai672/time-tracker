@@ -34,6 +34,14 @@ export type ActionResult =
   | { ok: true }
   | { ok: false; errors: string[] };
 
+/** 12- or 24-hour wall-clock display. */
+export type TimeFormat = "12h" | "24h";
+
+/** User preferences persisted separately from the tracked data. */
+export type Settings = {
+  timeFormat: TimeFormat;
+};
+
 /** Everything persisted to localStorage, under a single versioned key. */
 export type AppData = {
   version: number;

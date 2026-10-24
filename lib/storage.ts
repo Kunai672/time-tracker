@@ -9,12 +9,20 @@
  * a browser.
  */
 import {
+  DEFAULT_SETTINGS,
   SCHEMA_VERSION,
+  SETTINGS_STORAGE_KEY,
   STORAGE_KEY,
   UNCATEGORIZED_CATEGORY,
   UNCATEGORIZED_ID,
 } from "./constants";
-import type { AppData, Category, RunningTimer, TimeEntry } from "./types";
+import type {
+  AppData,
+  Category,
+  RunningTimer,
+  Settings,
+  TimeEntry,
+} from "./types";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -156,27 +164,49 @@ export function migrate(raw: unknown): AppData {
   return normalize(data);
 }
 
+/** How the persisted data was read, so the UI can offer a recovery path. */
+export type StorageStatus = "ok" | "empty" | "corrupt";
+
+export type StorageLoadResult = {
+  data: AppData;
+  status: StorageStatus;
+};
+
 /**
- * Loads persisted data. Returns defaults when storage is unavailable, empty,
- * corrupt, or written by an incompatible version.
+ * Like `load`, but also reports whether the stored payload was missing/empty
+ * or unreadable/corrupt. Never throws: unusable data still yields defaults.
  */
-export function load(storage: StorageLike | null = getDefaultStorage()): AppData {
-  if (!storage) return createDefaultData();
+export function loadWithStatus(
+  storage: StorageLike | null = getDefaultStorage(),
+): StorageLoadResult {
+  if (!storage) return { data: createDefaultData(), status: "empty" };
 
   let raw: string | null;
   try {
     raw = storage.getItem(STORAGE_KEY);
   } catch {
-    return createDefaultData();
+    return { data: createDefaultData(), status: "corrupt" };
   }
 
-  if (raw === null || raw === "") return createDefaultData();
+  if (raw === null || raw === "") {
+    return { data: createDefaultData(), status: "empty" };
+  }
 
   try {
-    return migrate(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
+    const data = migrate(parsed);
+    return { data, status: isRecord(parsed) ? "ok" : "corrupt" };
   } catch {
-    return createDefaultData();
+    return { data: createDefaultData(), status: "corrupt" };
   }
+}
+
+/**
+ * Loads persisted data. Returns defaults when storage is unavailable, empty,
+ * corrupt, or written by an incompatible version.
+ */
+export function load(storage: StorageLike | null = getDefaultStorage()): AppData {
+  return loadWithStatus(storage).data;
 }
 
 /** Persists data. A missing/throwing storage backend is a silent no-op. */
@@ -203,11 +233,16 @@ export function save(
 export type AppDataSnapshot = {
   data: AppData;
   ready: boolean;
+  status: StorageStatus;
 };
 
 let clientSnapshot: AppDataSnapshot | null = null;
 const listeners = new Set<() => void>();
-const serverSnapshot: AppDataSnapshot = { data: createDefaultData(), ready: false };
+const serverSnapshot: AppDataSnapshot = {
+  data: createDefaultData(),
+  ready: false,
+  status: "ok",
+};
 
 /** Stable snapshot used while rendering on the server / hydrating. */
 export function getServerSnapshot(): AppDataSnapshot {
@@ -217,7 +252,8 @@ export function getServerSnapshot(): AppDataSnapshot {
 /** Current client snapshot (loads from storage on first call). */
 export function getSnapshot(): AppDataSnapshot {
   if (!clientSnapshot) {
-    clientSnapshot = { data: load(), ready: true };
+    const result = loadWithStatus();
+    clientSnapshot = { data: result.data, ready: true, status: result.status };
   }
   return clientSnapshot;
 }
@@ -231,7 +267,7 @@ export function subscribe(listener: () => void): () => void {
 
 /** Persists and publishes a new snapshot to every subscriber. */
 export function writeData(next: AppData): void {
-  clientSnapshot = { data: next, ready: true };
+  clientSnapshot = { data: next, ready: true, status: "ok" };
   save(next);
   for (const listener of listeners) listener();
 }
@@ -244,4 +280,75 @@ export function clear(storage: StorageLike | null = getDefaultStorage()): void {
   } catch {
     // Ignore.
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * User settings (time format)
+ *
+ * Stored under a separate key so preferences survive a data reset. The same
+ * injectable backend and defensive parsing as the main data apply.
+ * ------------------------------------------------------------------ */
+
+export function loadSettings(
+  storage: StorageLike | null = getDefaultStorage(),
+): Settings {
+  if (!storage) return { ...DEFAULT_SETTINGS };
+
+  let raw: string | null;
+  try {
+    raw = storage.getItem(SETTINGS_STORAGE_KEY);
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+  if (raw === null || raw === "") return { ...DEFAULT_SETTINGS };
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return { ...DEFAULT_SETTINGS };
+    return {
+      timeFormat: parsed.timeFormat === "12h" ? "12h" : "24h",
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+export function saveSettings(
+  settings: Settings,
+  storage: StorageLike | null = getDefaultStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
+
+let clientSettingsSnapshot: Settings | null = null;
+const settingsListeners = new Set<() => void>();
+const serverSettingsSnapshot: Settings = { ...DEFAULT_SETTINGS };
+
+export function getSettingsServerSnapshot(): Settings {
+  return serverSettingsSnapshot;
+}
+
+export function getSettingsSnapshot(): Settings {
+  if (!clientSettingsSnapshot) {
+    clientSettingsSnapshot = loadSettings();
+  }
+  return clientSettingsSnapshot;
+}
+
+export function subscribeSettings(listener: () => void): () => void {
+  settingsListeners.add(listener);
+  return () => {
+    settingsListeners.delete(listener);
+  };
+}
+
+export function writeSettings(next: Settings): void {
+  clientSettingsSnapshot = next;
+  saveSettings(next);
+  for (const listener of settingsListeners) listener();
 }

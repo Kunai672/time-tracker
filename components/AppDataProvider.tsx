@@ -24,6 +24,7 @@ import {
   getSnapshot,
   subscribe,
   writeData,
+  type StorageStatus,
 } from "../lib/storage";
 import {
   createCategory,
@@ -31,7 +32,12 @@ import {
   recolorCategory,
   renameCategory,
 } from "../lib/categories";
-import { createEntry, deleteEntry, updateEntry } from "../lib/entries";
+import {
+  createEntry,
+  deleteEntry,
+  restoreEntry,
+  updateEntry,
+} from "../lib/entries";
 import { newId } from "../lib/ids";
 import { defaultClock, startTimer, stopTimer } from "../lib/timer";
 import {
@@ -41,11 +47,13 @@ import {
   validateTimeEntryInput,
   type TimeEntryInput,
 } from "../lib/validation";
-import type { ActionResult, AppData } from "../lib/types";
+import type { ActionResult, AppData, TimeEntry } from "../lib/types";
 
 export type AppDataContextValue = {
   data: AppData;
   ready: boolean;
+  /** `"corrupt"` when stored data could not be read, so pages can recover. */
+  storageStatus: StorageStatus;
   createCategoryAction: (draft: { name: string; color: string }) => ActionResult;
   renameCategoryAction: (id: string, name: string) => ActionResult;
   recolorCategoryAction: (id: string, color: string) => ActionResult;
@@ -53,6 +61,7 @@ export type AppDataContextValue = {
   createEntryAction: (draft: TimeEntryInput) => ActionResult;
   updateEntryAction: (id: string, draft: TimeEntryInput) => ActionResult;
   deleteEntryAction: (id: string) => void;
+  restoreEntryAction: (entry: TimeEntry) => void;
   startTimerAction: (categoryId: string) => void;
   stopTimerAction: (description: string) => void;
   replaceDataAction: (data: AppData) => void;
@@ -63,7 +72,7 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const { data, ready } = snapshot;
+  const { data, ready, status } = snapshot;
 
   const commit = useCallback((updater: (current: AppData) => AppData) => {
     writeData(updater(getSnapshot().data));
@@ -73,6 +82,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       ready,
+      storageStatus: status,
 
       createCategoryAction(draft) {
         const result = validateCategoryInput(draft);
@@ -142,6 +152,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         commit((state) => ({ ...state, entries: deleteEntry(state.entries, id) }));
       },
 
+      restoreEntryAction(entry) {
+        commit((state) => ({
+          ...state,
+          entries: restoreEntry(state.entries, entry),
+        }));
+      },
+
       startTimerAction(categoryId) {
         commit((state) => ({
           ...state,
@@ -174,7 +191,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         commit(() => createDefaultData());
       },
     }),
-    [commit, data, ready],
+    [commit, data, ready, status],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

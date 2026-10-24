@@ -2,6 +2,16 @@
 
 import { useState, type FormEvent } from "react";
 
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Input } from "./ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { findCategory } from "../lib/categories";
 import { formatDuration } from "../lib/duration";
 import {
@@ -20,8 +30,7 @@ export type EntriesManagerProps = {
   onDelete: (id: string) => void;
 };
 
-/** Default form values. Only ever called from the browser (the page mounts
- * this component after storage has loaded), so `new Date()` is safe. */
+/** Default form values. Only ever called from the browser. */
 function makeEmptyForm(categories: Category[]) {
   const now = toDatetimeLocalValue(new Date().toISOString());
   return {
@@ -32,6 +41,11 @@ function makeEmptyForm(categories: Category[]) {
   };
 }
 
+/**
+ * Add/edit form plus a list of entries. Kept as the straightforward,
+ * self-contained manager; the Entries page composes the richer dialog/grouped
+ * views instead.
+ */
 export function EntriesManager({
   entries,
   categories,
@@ -58,9 +72,7 @@ export function EntriesManager({
       end: fromDatetimeLocalValue(form.end),
     };
 
-    const result = editingId
-      ? onUpdate(editingId, draft)
-      : onCreate(draft);
+    const result = editingId ? onUpdate(editingId, draft) : onCreate(draft);
 
     if (result.ok) {
       resetForm();
@@ -82,128 +94,180 @@ export function EntriesManager({
 
   return (
     <section aria-labelledby="entries-heading" className="space-y-6">
-      <h2 id="entries-heading" className="text-xl font-semibold">
-        {editingId ? "Edit entry" : "Add entry"}
-      </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle id="entries-heading">
+            {editingId ? "Edit entry" : "Add entry"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+            <label
+              htmlFor="entries-description"
+              className="flex flex-col gap-1.5"
+            >
+              <span className="text-xs font-medium text-muted-foreground">
+                Description
+              </span>
+              <Input
+                id="entries-description"
+                name="description"
+                value={form.description}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </label>
 
-      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col text-sm">
-          <span>Description</span>
-          <input
-            name="description"
-            value={form.description}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, description: event.target.value }))
-            }
-            className="rounded border px-2 py-1"
-          />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Category</span>
-          <select
-            name="categoryId"
-            value={form.categoryId}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, categoryId: event.target.value }))
-            }
-            className="rounded border px-2 py-1"
-          >
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>Start</span>
-          <input
-            name="start"
-            type="datetime-local"
-            value={form.start}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, start: event.target.value }))
-            }
-            className="rounded border px-2 py-1"
-          />
-        </label>
-        <label className="flex flex-col text-sm">
-          <span>End</span>
-          <input
-            name="end"
-            type="datetime-local"
-            value={form.end}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, end: event.target.value }))
-            }
-            className="rounded border px-2 py-1"
-          />
-        </label>
-        <div className="flex gap-2 sm:col-span-2">
-          <button type="submit" className="rounded bg-indigo-600 px-3 py-1 text-white">
-            {editingId ? "Save changes" : "Add entry"}
-          </button>
-          {editingId && (
-            <button type="button" onClick={resetForm} className="rounded border px-3 py-1">
-              Cancel
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <span
+                id="entries-category-label"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                Category
+              </span>
+              <Select
+                name="categoryId"
+                value={form.categoryId}
+                onValueChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    categoryId: String(value),
+                  }))
+                }
+              >
+                <SelectTrigger
+                  aria-labelledby="entries-category-label"
+                  className="w-full"
+                >
+                  <SelectValue>
+                    {(value) =>
+                      categories.find((category) => category.id === value)
+                        ?.name ?? "Select a category"
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <label htmlFor="entries-start" className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Start
+              </span>
+              <Input
+                id="entries-start"
+                name="start"
+                type="datetime-local"
+                value={form.start}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    start: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label htmlFor="entries-end" className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                End
+              </span>
+              <Input
+                id="entries-end"
+                name="end"
+                type="datetime-local"
+                value={form.end}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    end: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <div className="flex gap-2 sm:col-span-2">
+              <Button type="submit">
+                {editingId ? "Save changes" : "Add entry"}
+              </Button>
+              {editingId && (
+                <Button type="button" variant="outline" onClick={resetForm}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </form>
+
+          {errors.length > 0 && (
+            <ul role="alert" className="mt-3 space-y-1 text-sm text-destructive">
+              {errors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
           )}
-        </div>
-      </form>
-
-      {errors.length > 0 && (
-        <ul role="alert" className="text-sm text-red-600">
-          {errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      )}
+        </CardContent>
+      </Card>
 
       {entries.length === 0 ? (
-        <p className="text-sm text-gray-500">No entries yet.</p>
+        <p className="text-sm text-muted-foreground">No entries yet.</p>
       ) : (
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="py-2">Description</th>
-              <th className="py-2">Category</th>
-              <th className="py-2">Start</th>
-              <th className="py-2">End</th>
-              <th className="py-2">Duration</th>
-              <th className="py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => {
-              const category = findCategory(categories, entry.categoryId);
-              return (
-                <tr key={entry.id} className="border-b">
-                  <td className="py-2">{entry.description}</td>
-                  <td className="py-2">{category?.name ?? "Uncategorized"}</td>
-                  <td className="py-2">{new Date(entry.start).toLocaleString()}</td>
-                  <td className="py-2">{new Date(entry.end).toLocaleString()}</td>
-                  <td className="py-2">{formatDuration(entry.durationMinutes)}</td>
-                  <td className="flex gap-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() => startEditing(entry)}
-                      className="rounded border px-2 py-1"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(entry.id)}
-                      className="rounded border px-2 py-1"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {entries.map((entry) => {
+            const category = findCategory(categories, entry.categoryId);
+            return (
+              <li
+                key={entry.id}
+                className="flex flex-wrap items-center gap-3 px-3 py-3 text-sm"
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: category?.color }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {entry.description}
+                </span>
+                <span className="text-muted-foreground">
+                  {category?.name ?? "Uncategorized"}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {new Date(entry.start).toLocaleString()}
+                </span>
+                <span className="tabular-nums">
+                  {formatDuration(entry.durationMinutes)}
+                </span>
+                <span className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => startEditing(entry)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => onDelete(entry.id)}
+                  >
+                    Delete
+                  </Button>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

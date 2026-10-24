@@ -52,6 +52,18 @@ export function findEntry(
   return entries.find((entry) => entry.id === id);
 }
 
+/**
+ * Puts a deleted entry back, keeping its original id. Used by the undo toast.
+ * Restoring an entry that already exists is a no-op.
+ */
+export function restoreEntry(
+  entries: TimeEntry[],
+  entry: TimeEntry,
+): TimeEntry[] {
+  if (entries.some((existing) => existing.id === entry.id)) return entries;
+  return [...entries, { ...entry }];
+}
+
 /** Newest first by start time; ties fall back to end time then id. */
 export function sortEntriesNewestFirst(entries: TimeEntry[]): TimeEntry[] {
   return [...entries].sort((a, b) => {
