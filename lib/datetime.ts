@@ -30,6 +30,21 @@ export function todayDateKey(now: Date = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/**
+ * Short chart axis label for a local `YYYY-MM-DD` key, e.g. `"Thu 22"`.
+ * Invalid keys are returned unchanged.
+ */
+export function formatChartDay(key: string): string {
+  const [year, month, day] = key.split("-").map(Number);
+  if (!year || !month || !day) return key;
+  // Build the label from parts so the order is always weekday-then-day
+  // ("Thu 22") regardless of the runtime's locale data.
+  const weekday = new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    weekday: "short",
+  });
+  return `${weekday} ${day}`;
+}
+
 /** Local `YYYY-MM-DD` for an ISO timestamp. */
 export function isoToLocalDateKey(iso: string): string {
   const date = new Date(iso);

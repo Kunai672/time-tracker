@@ -19,10 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { formatTime } from "../lib/datetime";
 import { formatClock } from "../lib/duration";
 import { elapsedSeconds } from "../lib/timer";
 import type { Category, RunningTimer } from "../lib/types";
 import { useAppData } from "./AppDataProvider";
+import { useSettings } from "./SettingsProvider";
 import { useNowSeconds } from "./useNow";
 
 export type TimerCardViewProps = {
@@ -36,6 +38,8 @@ export type TimerCardViewProps = {
   onDescriptionChange: (value: string) => void;
   onStart: () => void;
   onStop: () => void;
+  /** Wall-clock time the current timer began, e.g. "Started at 9:00 AM". */
+  startedAtLabel?: string;
 };
 
 /** A small pulsing dot that signals an active timer. */
@@ -75,13 +79,17 @@ export function TimerCardView({
   onDescriptionChange,
   onStart,
   onStop,
+  startedAtLabel,
 }: TimerCardViewProps) {
   const runningCategory = runningTimer
     ? categories.find((category) => category.id === runningTimer.categoryId)
     : undefined;
 
   return (
-    <Card data-testid="timer-card">
+    <Card
+      data-testid="timer-card"
+      className={runningTimer ? "ring-1 ring-primary/20" : undefined}
+    >
       <CardHeader>
         <div className="flex items-center gap-3">
           {runningTimer && <PulseDot />}
@@ -99,13 +107,20 @@ export function TimerCardView({
       </CardHeader>
       <CardContent className="space-y-4">
         {runningTimer && (
-          <p
-            data-testid="timer-clock"
-            className="text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl"
-            aria-live="polite"
-          >
-            {formatClock(elapsedSeconds(runningTimer, now))}
-          </p>
+          <div className="space-y-1">
+            <p
+              data-testid="timer-clock"
+              className="text-display font-semibold tabular-nums tracking-tight sm:text-display-lg"
+              aria-live="polite"
+            >
+              {formatClock(elapsedSeconds(runningTimer, now))}
+            </p>
+            {startedAtLabel && (
+              <p className="text-sm text-muted-foreground">
+                {startedAtLabel}
+              </p>
+            )}
+          </div>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -187,12 +202,15 @@ export function TimerCardView({
 /** Live timer card wired to the app store. */
 export function TimerCard() {
   const { data, startTimerAction, stopTimerAction } = useAppData();
+  const { settings } = useSettings();
   const running = data.runningTimer;
   const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
 
   const seconds = useNowSeconds(Boolean(running));
   const selected = categoryId || data.categories[0]?.id || "";
+  // While running, show the category the timer actually belongs to.
+  const displayedCategory = running ? running.categoryId : selected;
   const now = seconds !== null ? new Date(seconds * 1000) : new Date(0);
 
   function handleStart() {
@@ -210,12 +228,17 @@ export function TimerCard() {
       categories={data.categories}
       runningTimer={running}
       now={now}
-      categoryId={selected}
+      categoryId={displayedCategory}
       description={description}
       onCategoryChange={setCategoryId}
       onDescriptionChange={setDescription}
       onStart={handleStart}
       onStop={handleStop}
+      startedAtLabel={
+        running
+          ? `Started at ${formatTime(running.startedAt, settings.timeFormat === "12h")}`
+          : undefined
+      }
     />
   );
 }

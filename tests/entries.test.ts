@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   createEntry,
   deleteEntry,
+  duplicateEntry,
   findEntry,
   sortEntriesNewestFirst,
   updateEntry,
@@ -79,4 +80,20 @@ test("sortEntriesNewestFirst breaks ties deterministically", () => {
     sortEntriesNewestFirst(entries).map((e) => e.id),
     ["a", "b"],
   );
+});
+
+test("duplicateEntry copies every field under a new id", () => {
+  const original = createEntry([], draft, "e1")[0];
+  const withCopy = duplicateEntry([original], original, "e2");
+
+  assert.equal(withCopy.length, 2);
+  const copy = findEntry(withCopy, "e2");
+  assert.ok(copy);
+  assert.equal(copy.description, original.description);
+  assert.equal(copy.categoryId, original.categoryId);
+  assert.equal(copy.start, original.start);
+  assert.equal(copy.end, original.end);
+  assert.equal(copy.durationMinutes, original.durationMinutes);
+  // The source row is untouched.
+  assert.deepEqual(findEntry(withCopy, "e1"), original);
 });

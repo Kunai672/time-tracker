@@ -86,7 +86,8 @@ export function isRunningTimer(value: unknown): value is RunningTimer {
     typeof value.categoryId === "string" &&
     value.categoryId.length > 0 &&
     typeof value.startedAt === "string" &&
-    !Number.isNaN(new Date(value.startedAt).getTime())
+    !Number.isNaN(new Date(value.startedAt).getTime()) &&
+    (value.description === undefined || typeof value.description === "string")
   );
 }
 

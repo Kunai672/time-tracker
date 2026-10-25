@@ -7,16 +7,8 @@ import type { DashboardStats } from "../lib/stats";
 import { cn } from "../lib/utils";
 
 function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
-  if (deltaPct === null) {
-    return (
-      <span
-        className="text-xs text-muted-foreground"
-        title="No data in the previous period"
-      >
-        —
-      </span>
-    );
-  }
+  // No baseline means no comparison, so nothing is rendered at all.
+  if (deltaPct === null) return null;
 
   const up = deltaPct > 0;
   const flat = deltaPct === 0;
@@ -56,7 +48,7 @@ function StatTile({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <p className="truncate text-2xl font-semibold tabular-nums" title={value}>
+        <p className="truncate text-title font-semibold tabular-nums" title={value}>
           {value}
         </p>
         <div className="flex items-center justify-between gap-2">
@@ -79,7 +71,7 @@ export function StatCards({ stats }: { stats: DashboardStats }) {
   const top = stats.topCategory;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       <StatTile
         label="Today"
         value={formatDuration(stats.today.current)}
@@ -110,7 +102,7 @@ export function StatCards({ stats }: { stats: DashboardStats }) {
 
 export function StatCardsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
       {[0, 1, 2, 3].map((index) => (
         <Card key={index}>
           <CardHeader>

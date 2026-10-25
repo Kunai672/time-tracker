@@ -39,7 +39,11 @@ import {
   updateEntry,
 } from "../lib/entries";
 import { newId } from "../lib/ids";
-import { defaultClock, startTimer, stopTimer } from "../lib/timer";
+import {
+  defaultClock,
+  startTimerWithDescription,
+  stopTimer,
+} from "../lib/timer";
 import {
   validateCategoryInput,
   validateCategoryName,
@@ -62,7 +66,7 @@ export type AppDataContextValue = {
   updateEntryAction: (id: string, draft: TimeEntryInput) => ActionResult;
   deleteEntryAction: (id: string) => void;
   restoreEntryAction: (entry: TimeEntry) => void;
-  startTimerAction: (categoryId: string) => void;
+  startTimerAction: (categoryId: string, description?: string) => void;
   stopTimerAction: (description: string) => void;
   replaceDataAction: (data: AppData) => void;
   resetAction: () => void;
@@ -159,10 +163,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }));
       },
 
-      startTimerAction(categoryId) {
+      startTimerAction(categoryId, description = "") {
         commit((state) => ({
           ...state,
-          runningTimer: startTimer(categoryId, defaultClock()),
+          runningTimer: startTimerWithDescription(
+            categoryId,
+            defaultClock(),
+            description,
+          ),
         }));
       },
 

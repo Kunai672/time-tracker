@@ -2,6 +2,7 @@
  * Pure aggregation helpers used by the charts.
  */
 import { UNCATEGORIZED_ID } from "./constants";
+import { isoToLocalDateKey } from "./datetime";
 import { dateKey, type EntryFilters } from "./filters";
 import { minutesToHours } from "./duration";
 import type { Category, TimeEntry } from "./types";
@@ -71,6 +72,57 @@ export function aggregateByCategory(
       };
     })
     .sort((a, b) => b.minutes - a.minutes);
+}
+
+/** One day of the dashboard's stacked bar chart. */
+export type StackedDay = {
+  date: string;
+  /** Total minutes across every category on this day. */
+  total: number;
+  /** Minutes per category id (missing ids are absent, i.e. zero). */
+  values: Record<string, number>;
+};
+
+/**
+ * Stacks minutes per category for each day in `days` (local `YYYY-MM-DD`
+ * keys), always emitting a row per requested day so days without entries show
+ * as genuine zeros. Entries whose category no longer exists fall back to
+ * Uncategorized, matching `aggregateByCategory`.
+ */
+export function aggregateStackedByDay(
+  entries: TimeEntry[],
+  categories: Category[],
+  days: string[],
+): StackedDay[] {
+  const known = new Set(categories.map((category) => category.id));
+  const wanted = new Set(days);
+  const totals = new Map<string, Map<string, number>>();
+
+  for (const day of days) totals.set(day, new Map());
+
+  for (const entry of entries) {
+    const key = isoToLocalDateKey(entry.start);
+    if (!wanted.has(key)) continue;
+    const categoryId = known.has(entry.categoryId)
+      ? entry.categoryId
+      : UNCATEGORIZED_ID;
+    const dayTotals = totals.get(key);
+    if (!dayTotals) continue;
+    dayTotals.set(
+      categoryId,
+      (dayTotals.get(categoryId) ?? 0) + entry.durationMinutes,
+    );
+  }
+
+  return days.map((day) => {
+    const values: Record<string, number> = {};
+    let total = 0;
+    for (const [categoryId, minutes] of totals.get(day) ?? []) {
+      values[categoryId] = minutes;
+      total += minutes;
+    }
+    return { date: day, total, values };
+  });
 }
 
 /** Default filter range helper: everything from the first to the last day. */

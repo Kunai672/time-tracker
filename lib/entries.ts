@@ -45,6 +45,18 @@ export function deleteEntry(entries: TimeEntry[], id: string): TimeEntry[] {
   return entries.filter((entry) => entry.id !== id);
 }
 
+/**
+ * Copies an entry as a new row under `id`, keeping its description, category
+ * and times. `id` is injected so tests stay deterministic.
+ */
+export function duplicateEntry(
+  entries: TimeEntry[],
+  entry: TimeEntry,
+  id: string,
+): TimeEntry[] {
+  return [...entries, { ...entry, id }];
+}
+
 export function findEntry(
   entries: TimeEntry[],
   id: string,

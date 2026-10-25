@@ -15,6 +15,22 @@ export function startTimer(categoryId: string, now: Date): RunningTimer {
   return { categoryId, startedAt: now.toISOString() };
 }
 
+/**
+ * Like `startTimer`, but carries a label onto the running timer. Used by the
+ * entries page's "Resume" action so stopping keeps the original description.
+ * A blank label is omitted, keeping the base shape.
+ */
+export function startTimerWithDescription(
+  categoryId: string,
+  now: Date,
+  description: string,
+): RunningTimer {
+  const timer = startTimer(categoryId, now);
+  const trimmed = description.trim();
+  if (trimmed) timer.description = trimmed;
+  return timer;
+}
+
 /** Whole minutes elapsed on a running timer. */
 export function elapsedMinutes(timer: RunningTimer, now: Date): number {
   return durationMinutesBetween(timer.startedAt, now);
@@ -51,8 +67,11 @@ export function stopTimer(
     return { entries, timer: null, entry: null };
   }
 
+  // Prefer the description typed while running, then one carried over from
+  // "Resume", and only fall back to the generic label when both are blank.
   const draft: TimeEntryDraft = {
-    description: description.trim() || "Tracked time",
+    description:
+      description.trim() || timer.description?.trim() || "Tracked time",
     categoryId: timer.categoryId,
     start: timer.startedAt,
     end: now.toISOString(),

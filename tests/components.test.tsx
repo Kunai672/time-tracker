@@ -106,16 +106,33 @@ test("EntriesManager renders actions wired with the provided handlers", () => {
   assert.match(html, /Add entry|Save changes/);
 });
 
-function renderCategories(list: Category[]): string {
+function renderCategories(
+  list: Category[],
+  entries: TimeEntry[] = [],
+  weeklyMinutes: Record<string, number> = {},
+): string {
   return renderToStaticMarkup(
     <CategoriesManager
       categories={list}
+      entries={entries}
+      weeklyMinutes={weeklyMinutes}
       onCreate={ok}
       onRename={ok}
       onRecolor={ok}
       onDelete={noop}
     />,
   );
+}
+
+function minutesEntry(id: string, categoryId: string, minutes: number): TimeEntry {
+  return {
+    id,
+    description: id,
+    categoryId,
+    start: "2024-05-01T09:00:00.000Z",
+    end: `2024-05-01T09:${String(minutes).padStart(2, "0")}:00.000Z`,
+    durationMinutes: minutes,
+  };
 }
 
 test("CategoriesManager renders the create form and rows", () => {
@@ -127,10 +144,33 @@ test("CategoriesManager renders the create form and rows", () => {
   assert.match(html, /Study/);
 });
 
-test("CategoriesManager disables deleting Uncategorized", () => {
+test("CategoriesManager keeps the built-in category's actions available but undeletable", () => {
   const html = renderCategories(categories);
-  // The only disabled button in the markup belongs to the built-in category.
-  assert.match(html, /<button[^>]*disabled[^>]*>Delete<\/button>/);
+  // Every card exposes its actions in an overflow menu; the built-in bucket
+  // stays in the list and the domain helper refuses to remove it.
+  assert.match(html, /aria-label="Actions for Uncategorized"/);
+  assert.match(html, /aria-label="Actions for Work"/);
+  const result = deleteCategory(categories, [], UNCATEGORIZED_CATEGORY.id);
+  assert.ok(result.categories.some((item) => item.id === UNCATEGORIZED_CATEGORY.id));
+});
+
+test("category cards show weekly time, entry count and a share bar", () => {
+  const entries = [
+    minutesEntry("a", "work", 120),
+    minutesEntry("b", "work", 60),
+    minutesEntry("c", "study", 60),
+  ];
+  const html = renderCategories(categories, entries, { work: 180, study: 60 });
+
+  assert.match(html, /2 entries/);
+  assert.match(html, /1 entry/);
+  assert.match(html, /Share this week/);
+  // 180 of 240 weekly minutes rounds to 75%.
+  assert.match(html, /width:75%/);
+  // The picker moved into a popover, so no inline swatch group is rendered.
+  assert.doesNotMatch(html, /role="radiogroup"/);
+  // The add form still carries the color value for submission.
+  assert.match(html, /name="color"/);
 });
 
 test("CategoriesManager reflects create, rename and delete", () => {

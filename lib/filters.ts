@@ -97,3 +97,67 @@ export function filterEntries(
     return true;
   });
 }
+
+/** A removable summary of one active filter, shown as a chip. */
+export type FilterChip = {
+  /** Unique per chip: `"date"`, `"search"` or a category id. */
+  id: string;
+  kind: "date" | "search" | "category";
+  label: string;
+};
+
+/** Whether any filter (including a non-default date preset) is applied. */
+export function hasActiveFilters(
+  filters: EntryFilters,
+  preset: DateRangePreset,
+): boolean {
+  return (
+    preset !== "all" ||
+    Boolean(filters.search?.trim()) ||
+    Boolean(filters.categoryId && filters.categoryId !== ALL_CATEGORIES) ||
+    (filters.categoryIds?.length ?? 0) > 0 ||
+    Boolean(filters.from || filters.to)
+  );
+}
+
+/**
+ * Turns the active filters into removable chips. Category chips resolve their
+ * label from `categories`; a date chip uses the preset label, or
+ * "Custom range" when only explicit bounds are set.
+ */
+export function activeFilterChips(
+  filters: EntryFilters,
+  preset: DateRangePreset,
+  categories: readonly { id: string; name: string }[] = [],
+): FilterChip[] {
+  const chips: FilterChip[] = [];
+
+  const presetLabel = DATE_RANGE_PRESETS.find(
+    (item) => item.value === preset,
+  )?.label;
+  if (preset !== "all" && presetLabel) {
+    chips.push({ id: "date", kind: "date", label: presetLabel });
+  } else if (filters.from || filters.to) {
+    chips.push({ id: "date", kind: "date", label: "Custom range" });
+  }
+
+  const search = filters.search?.trim();
+  if (search) {
+    chips.push({ id: "search", kind: "search", label: `“${search}”` });
+  }
+
+  const categoryIds =
+    filters.categoryIds ??
+    (filters.categoryId && filters.categoryId !== ALL_CATEGORIES
+      ? [filters.categoryId]
+      : []);
+  for (const id of categoryIds) {
+    chips.push({
+      id,
+      kind: "category",
+      label: categories.find((category) => category.id === id)?.name ?? "Uncategorized",
+    });
+  }
+
+  return chips;
+}

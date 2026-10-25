@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   aggregateByCategory,
   aggregateByDay,
+  aggregateStackedByDay,
   fullRange,
   totalMinutes,
 } from "../lib/aggregate";
@@ -70,4 +71,48 @@ test("totalMinutes sums every entry", () => {
 test("fullRange spans the earliest and latest entry dates", () => {
   assert.deepEqual(fullRange(entries), { from: "2024-05-01", to: "2024-05-02" });
   assert.deepEqual(fullRange([]), {});
+});
+
+function localEntry(
+  id: string,
+  categoryId: string,
+  day: number,
+  durationMinutes: number,
+): TimeEntry {
+  const start = new Date(2024, 4, day, 9, 0, 0);
+  return {
+    id,
+    description: id,
+    categoryId,
+    start: start.toISOString(),
+    end: new Date(start.getTime() + durationMinutes * 60_000).toISOString(),
+    durationMinutes,
+  };
+}
+
+test("aggregateStackedByDay fills zero days and groups by category", () => {
+  const localEntries = [
+    localEntry("a", "work", 1, 60),
+    localEntry("b", "work", 1, 30),
+    localEntry("c", "study", 2, 45),
+  ];
+  const result = aggregateStackedByDay(localEntries, categories, [
+    "2024-05-01",
+    "2024-05-02",
+    "2024-05-03",
+  ]);
+
+  assert.deepEqual(result, [
+    { date: "2024-05-01", total: 90, values: { work: 90 } },
+    { date: "2024-05-02", total: 45, values: { study: 45 } },
+    { date: "2024-05-03", total: 0, values: {} },
+  ]);
+});
+
+test("aggregateStackedByDay ignores entries outside the requested days", () => {
+  const localEntries = [localEntry("a", "work", 1, 60)];
+  assert.deepEqual(
+    aggregateStackedByDay(localEntries, categories, ["2024-05-09"]),
+    [{ date: "2024-05-09", total: 0, values: {} }],
+  );
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +18,10 @@ import {
   type EntryFilters,
 } from "../../lib/filters";
 import { groupEntriesByDay } from "../../lib/entryGroups";
+import {
+  ADD_ENTRY_EVENT,
+  consumeAddEntryRequest,
+} from "../../lib/shortcuts";
 import type { ActionResult, TimeEntry } from "../../lib/types";
 import type { TimeEntryInput } from "../../lib/validation";
 
@@ -44,6 +48,8 @@ export default function EntriesPage() {
     updateEntryAction,
     deleteEntryAction,
     restoreEntryAction,
+    startTimerAction,
+    stopTimerAction,
   } = useAppData();
   const { settings } = useSettings();
 
@@ -57,6 +63,18 @@ export default function EntriesPage() {
     () => (seconds !== null ? new Date(seconds * 1000) : null),
     [seconds],
   );
+
+  // The global `N` shortcut either flags the request before navigation or
+  // fires an event when this page is already mounted.
+  useEffect(() => {
+    function openFromShortcut() {
+      setEditing(null);
+      setDialogOpen(true);
+    }
+    if (consumeAddEntryRequest()) openFromShortcut();
+    window.addEventListener(ADD_ENTRY_EVENT, openFromShortcut);
+    return () => window.removeEventListener(ADD_ENTRY_EVENT, openFromShortcut);
+  }, []);
 
   const groups = useMemo(() => {
     if (!now) return [];
@@ -90,11 +108,31 @@ export default function EntriesPage() {
     });
   }
 
+  function handleResume(entry: TimeEntry) {
+    // Carries the description onto the running timer so stopping keeps it.
+    startTimerAction(entry.categoryId, entry.description);
+    toast("Timer resumed", { description: entry.description });
+  }
+
+  function handleDuplicate(entry: TimeEntry) {
+    createEntryAction({
+      description: entry.description,
+      categoryId: entry.categoryId,
+      start: entry.start,
+      end: entry.end,
+    });
+  }
+
+  function handleStopRunning() {
+    // The description travels with the resumed timer; stopTimer falls back to it.
+    stopTimerAction("");
+  }
+
   return (
     <div className="flex flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
         <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          <h1 className="font-heading text-title font-semibold tracking-tight">
             Entries
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -127,6 +165,10 @@ export default function EntriesPage() {
               hour12={settings.timeFormat === "12h"}
               onEdit={openEdit}
               onDelete={handleDelete}
+              runningTimer={data.runningTimer}
+              onResume={handleResume}
+              onDuplicate={handleDuplicate}
+              onStop={handleStopRunning}
             />
           </div>
         </>

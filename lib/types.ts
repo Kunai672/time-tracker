@@ -27,6 +27,11 @@ export type RunningTimer = {
   categoryId: string;
   /** ISO-8601 timestamp of when the timer was started. */
   startedAt: string;
+  /**
+   * Optional label carried over from "Resume", so stopping the timer keeps the
+   * original description. Omitted for timers started from scratch.
+   */
+  description?: string;
 };
 
 /** Result returned by form actions so components can surface errors. */

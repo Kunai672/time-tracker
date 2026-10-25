@@ -34,10 +34,7 @@ export function RunningTimerIndicatorView({
     <Link
       href="/"
       data-testid="running-timer-indicator"
-      className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      aria-label={`Timer running${label}. ${formatDuration(
-        elapsedMinutes(timer, now),
-      )} elapsed. Open dashboard.`}
+      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <span className="relative flex size-2" aria-hidden>
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
@@ -47,6 +44,7 @@ export function RunningTimerIndicatorView({
         {formatDuration(elapsedMinutes(timer, now))}
       </span>
       <span className="hidden text-muted-foreground sm:inline">{label}</span>
+      <span className="sr-only">timer running, open dashboard</span>
     </Link>
   );
 }

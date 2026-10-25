@@ -34,9 +34,9 @@ export default function SettingsPage() {
   const hour12 = settings.timeFormat === "12h";
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[45rem] space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+        <h1 className="font-heading text-title font-semibold tracking-tight">
           Settings
         </h1>
         <p className="text-sm text-muted-foreground">

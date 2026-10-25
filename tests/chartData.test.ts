@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { categoryPercentages } from "../lib/chart-data";
+import { categoryPercentages, chartRangeDays } from "../lib/chart-data";
 import type { CategoryTotal } from "../lib/aggregate";
 
 function total(
@@ -48,4 +48,21 @@ test("percentages reflect the underlying proportions", () => {
     slices.map((slice) => slice.percent),
     [60, 30, 10],
   );
+});
+
+test("chartRangeDays returns inclusive local day keys ending today", () => {
+  const now = new Date(2024, 4, 22, 15, 30, 0); // Wed May 22 2024, local
+
+  const week = chartRangeDays("7d", now);
+  assert.equal(week.length, 7);
+  assert.equal(week[0], "2024-05-16");
+  assert.equal(week[6], "2024-05-22");
+
+  const month = chartRangeDays("30d", now);
+  assert.equal(month.length, 30);
+  assert.equal(month[29], "2024-05-22");
+
+  const thisMonth = chartRangeDays("month", now);
+  assert.equal(thisMonth[0], "2024-05-01");
+  assert.equal(thisMonth[thisMonth.length - 1], "2024-05-22");
 });

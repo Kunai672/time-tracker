@@ -3,38 +3,47 @@
 import Link from "next/link";
 
 import { useAppData } from "../components/AppDataProvider";
+import { useSettings } from "../components/SettingsProvider";
 import { CategoryChart } from "../components/CategoryChart";
 import { DailyChart } from "../components/DailyChart";
 import { StatCards, StatCardsSkeleton } from "../components/StatCards";
 import { TimerCard } from "../components/TimerCard";
-import { aggregateByCategory, aggregateByDay } from "../lib/aggregate";
+import { WelcomeCard } from "../components/WelcomeCard";
+import { aggregateByCategory } from "../lib/aggregate";
 import { Skeleton } from "../components/ui/skeleton";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
 import { findCategory } from "../lib/categories";
+import { formatTime } from "../lib/datetime";
 import { formatDuration } from "../lib/duration";
 import { sortEntriesNewestFirst } from "../lib/entries";
+import { buildSampleData, isFirstRun } from "../lib/sampleData";
 import { computeDashboardStats } from "../lib/stats";
 import { useNowSeconds } from "../components/useNow";
 
 function RecentEntries() {
   const { data } = useAppData();
+  const { settings } = useSettings();
+  const hour12 = settings.timeFormat === "12h";
   const recent = sortEntriesNewestFirst(data.entries).slice(0, 5);
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2">
+      <CardHeader>
         <CardTitle>Recent entries</CardTitle>
-        <Link
-          href="/entries"
-          className="rounded text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          View all
-        </Link>
+        <CardAction>
+          <Link
+            href="/entries"
+            className="inline-flex min-h-10 items-center rounded text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            View all
+          </Link>
+        </CardAction>
       </CardHeader>
       <CardContent>
         {recent.length === 0 ? (
@@ -61,8 +70,12 @@ function RecentEntries() {
                       {category?.name ?? "Uncategorized"}
                     </span>
                   </span>
-                  <span className="shrink-0 tabular-nums">
-                    {formatDuration(entry.durationMinutes)}
+                  <span className="flex shrink-0 items-center gap-3 tabular-nums">
+                    <span className="hidden text-muted-foreground md:inline">
+                      {formatTime(entry.start, hour12)} –{" "}
+                      {formatTime(entry.end, hour12)}
+                    </span>
+                    <span>{formatDuration(entry.durationMinutes)}</span>
                   </span>
                 </li>
               );
@@ -75,14 +88,14 @@ function RecentEntries() {
 }
 
 export default function DashboardPage() {
-  const { data, ready } = useAppData();
+  const { data, ready, replaceDataAction } = useAppData();
   const seconds = useNowSeconds(ready);
   const now = seconds !== null ? new Date(seconds * 1000) : null;
+  const firstRun = ready && isFirstRun(data);
 
   const stats = now
     ? computeDashboardStats(data.entries, data.categories, now)
     : null;
-  const daily = now ? aggregateByDay(data.entries) : [];
   const byCategory = now
     ? aggregateByCategory(data.entries, data.categories)
     : [];
@@ -90,7 +103,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+        <h1 className="font-heading text-title font-semibold tracking-tight">
           Dashboard
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -112,6 +125,10 @@ export default function DashboardPage() {
           </Card>
           <StatCardsSkeleton />
         </div>
+      ) : firstRun ? (
+        <WelcomeCard
+          onLoadSample={() => replaceDataAction(buildSampleData(new Date()))}
+        />
       ) : (
         <>
           <TimerCard />
@@ -120,10 +137,14 @@ export default function DashboardPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Hours per day</CardTitle>
+                <CardTitle>Time per day</CardTitle>
               </CardHeader>
               <CardContent>
-                <DailyChart data={daily} />
+                <DailyChart
+                  entries={data.entries}
+                  categories={data.categories}
+                  now={now}
+                />
               </CardContent>
             </Card>
             <Card>

@@ -56,6 +56,21 @@ export function formatClock(totalSeconds: number): string {
   return `${hours}:${pad(minutes)}:${pad(seconds)}`;
 }
 
+/**
+ * Formats a whole number of seconds as `HH:MM:SS`, always including the hour
+ * part. Used by the `document.title` running-timer display.
+ */
+export function formatLongClock(totalSeconds: number): string {
+  const safe =
+    Number.isFinite(totalSeconds) && totalSeconds > 0
+      ? Math.floor(totalSeconds)
+      : 0;
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
 /** Decimal hours, rounded to two decimals, for chart axes. */
 export function minutesToHours(minutes: number): number {
   const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : 0;

@@ -5,6 +5,7 @@ import {
   defaultClock,
   elapsedMinutes,
   startTimer,
+  startTimerWithDescription,
   stopTimer,
 } from "../lib/timer";
 import type { RunningTimer } from "../lib/types";
@@ -52,4 +53,24 @@ test("stopTimer with no running timer is a no-op", () => {
 
 test("defaultClock returns a Date", () => {
   assert.ok(defaultClock() instanceof Date);
+});
+
+test("startTimerWithDescription carries a description for Resume", () => {
+  assert.deepEqual(startTimerWithDescription("work", start, "Deep work"), {
+    categoryId: "work",
+    startedAt: "2024-05-01T09:00:00.000Z",
+    description: "Deep work",
+  });
+  // A blank description is omitted so the base shape is unchanged.
+  assert.deepEqual(startTimerWithDescription("work", start, "   "), {
+    categoryId: "work",
+    startedAt: "2024-05-01T09:00:00.000Z",
+  });
+});
+
+test("stopTimer falls back to the resumed description", () => {
+  const timer = startTimerWithDescription("work", start, "Deep work");
+  const result = stopTimer([], timer, end, "e1", "");
+  assert.equal(result.entries[0].description, "Deep work");
+  assert.equal(result.entries[0].durationMinutes, 75);
 });
