@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { ClockIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 
 import { useAppData } from "../../components/AppDataProvider";
+import { AccountCard } from "../../components/AccountCard";
 import { useSettings } from "../../components/SettingsProvider";
 import { DataTransfer } from "../../components/DataTransfer";
 import {
@@ -43,6 +44,8 @@ export default function SettingsPage() {
           Preferences and your local data.
         </p>
       </div>
+
+      <AccountCard />
 
       <Card>
         <CardHeader>

@@ -321,3 +321,195 @@ criteria that the harness did not cover; both are fixed and verified live:
   with the link flush to the card's right edge.
 Clean-tree `npm run verify` (136 tests) and `npm run ui:audit` (0 problems,
 144 captures) pass.
+
+---
+
+# Supabase persistence — phased log
+
+Next.js version: **16.4.3**, so the session-refresh file is **`proxy.ts`**
+(not `middleware.ts`).
+
+## Supabase Phase 0 — Repository abstraction (no behavior change)
+Added an async `DataRepository` contract in `lib/data/types.ts` (categories
+CRUD, entries CRUD incl. restore-with-same-id, running timer get/start/stop,
+`exportAll`/`importAll`). `lib/data/create-repository.ts` implements every rule
+once on top of a tiny synchronous `DataStore`; `lib/data/local-repository.ts`
+backs that with the unchanged `lib/storage.ts`, and
+`lib/data/memory-repository.ts` is the in-memory fake (it normalises on read
+like `load`, so the two behave identically). `tests/repository-contract.ts`
+holds the shared suite (category CRUD, delete-reassigns-entries, entry CRUD,
+restore id, timer→entry, export/import round-trip, import validation) and
+`tests/repository.test.ts` runs it against both backends.
+
+The UI now reads through TanStack Query: `components/DataProvider.tsx` owns the
+`QueryClient` and the active repository, `components/data-hooks.ts` exposes the
+query/mutation hooks, and `components/AppDataProvider.tsx` kept its existing
+`useAppData()` surface (so no page markup changed) while dropping every direct
+`lib/storage.ts` call. `components/DataErrorBanner.tsx` renders the error state
+for failed queries (with retry); loading skeletons were already present. No
+`lib/` pure-function signature or test changed and `lib/storage.ts` is
+untouched. lint + typecheck + test (152) + build + `ui:audit` (144 captures,
+0 problems) pass.
+
+## Supabase Phase 1 — Schema and RLS (SQL only)
+`supabase/migrations/0001_init.sql` creates `categories` (uuid id default
+`gen_random_uuid()`, `user_id` default `auth.uid()`), `entries`
+(`category_id` nullable → categories `on delete set null`, `check (ended_at >
+started_at)`) and `running_timers` (`user_id` primary key, so one timer per
+user). Indexes: `entries (user_id, started_at)`, `categories (user_id)` and
+`running_timers (user_id)`. RLS is enabled on all three tables, each with
+separate `select`/`insert`/`update`/`delete` policies for the `authenticated`
+role using `(select auth.uid()) = user_id`, and the insert/update policies add
+`with check`. `public.stop_timer(p_end timestamptz)` is `security invoker` and
+inserts the finished entry then deletes the timer in one function.
+
+`scripts/check-rls.ts` (`npm run check:rls`) parses every
+`supabase/migrations/*.sql` and fails on a missing RLS toggle, a missing
+policy, a policy that is not authenticated / not owner-scoped, a missing
+`with check`, or a missing `stop_timer`. Verified it fails on a deliberately
+broken throwaway migration (then removed it). `supabase/README.md` documents
+project creation, the two env vars, applying the migration via the CLI or the
+SQL editor, and the required auth redirect URLs. No database was contacted.
+lint + typecheck + test (152) + build + check:rls + `ui:audit` all pass.
+
+## Supabase Phase 2 — Clients, env and session refresh
+`lib/config.ts` decides the backend with pure helpers (`resolveBackend`,
+`resolveSupabaseConfig`, `hasSupabaseConfig`): Supabase when both
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are set,
+otherwise local. It also exposes two runtime overrides used only by tests and
+the audit — a `localStorage` flag and `TIME_TRACKER_BACKEND` (which is not read
+from `.env.local`, so it always wins at `next start`). `getSupabaseConfig()`
+returns `null` whenever the backend is local.
+
+`lib/supabase/cookie-methods.ts` holds the `getAll`/`setAll` cookie adapter and
+`createServerSupabaseClient`; `lib/supabase/server.ts` builds a per-request
+client from `next/headers` and exposes `getVerifiedClaims()` (uses
+`getClaims()`, never `getSession()`); `lib/supabase/client.ts` wraps
+`createBrowserClient`; `lib/supabase/session.ts` holds the pure redirect rules;
+`lib/supabase/middleware.ts` implements `updateSession`. The root **`proxy.ts`**
+(Next 16.4.3, so not `middleware.ts`) is thin: it only calls `updateSession`
+and is a no-op when Supabase is not configured. `.env.example` documents the
+two variables with blank values. Tests: `tests/config.test.ts` and
+`tests/supabase.test.ts` (mocked cookie stores/clients, redirect rules,
+`userFromClaims`).
+
+The audit harness now forces the local backend (`TIME_TRACKER_BACKEND=local`
+for the server and a `localStorage` flag for the browser provider), so it never
+reads or contacts a Supabase project even though `.env.local` defines one.
+lint + typecheck + test (160) + build + `ui:audit` (144 captures, 0 problems)
+pass.
+
+## Supabase Phase 3 — Auth UI
+`components/AuthForm.tsx` is a single shadcn-based form for both `/login` and
+`/signup` (email + password, inline `role="alert"` errors, `role="status"`
+feedback, real `<label>`s, keyboard/`autoComplete` support, no-JS-free markup).
+It calls `signInWithPassword` / `signUp` (with
+`emailRedirectTo=/auth/callback`) and redirects to a sanitized `next` path. A
+hydration-safe `useSyncExternalStore` read shows a "cloud sync is not
+configured" note on the local backend. `app/login/page.tsx` and
+`app/signup/page.tsx` wrap the form in `Suspense` for `useSearchParams`.
+`app/auth/callback/route.ts` exchanges the PKCE code and
+`app/auth/confirm/route.ts` verifies the email OTP; both redirect to `/` when
+Supabase is not configured.
+
+`components/AccountMenu.tsx` (+ `components/useAuthUser.ts`) shows the signed-in
+email and a Sign out action and renders nothing on the local backend or while
+signed out, so it only appears when Supabase is active with a session; the
+shell header now includes it. The account/auth pages are not linked from the
+app navigation. `ui:audit` now also visits `/login` and `/signup`; required
+fixes were an `sr-only` `h1` per page, permanently underlined inline links, and
+40px hit areas on those links. lint + typecheck + test (160) + build +
+`ui:audit` (216 captures, 0 problems) pass.
+
+## Supabase Phase 4 — SupabaseRepository
+`lib/data/supabase-repository.ts` implements `DataRepository` on top of a
+narrow `SupabaseDataClient` seam (`lib/data/supabase-client.ts`, adapted from
+the real client in `lib/data/supabase-adapter.ts`). It maps snake_case rows to
+camelCase models, maps `category_id: null` to the built-in Uncategorized
+category (and back to `null` on writes), and converts Supabase errors into
+typed `DataWriteError`/`DataValidationError`s. `stopTimer` reads the timer,
+updates its description when the caller supplied one, then calls the atomic
+`stop_timer` RPC. `lib/data/app-repository.ts` picks Supabase only in the
+browser when `getBackend()` is `"supabase"`, and otherwise returns the local
+repository; `DataProvider` now uses it.
+
+`tests/fake-supabase.ts` is a small in-memory PostgREST stand-in (select /
+insert / update / upsert / delete, `stop_timer`, and the FK
+`on delete set null` cascade) and the shared contract suite runs against
+`createSupabaseRepository` through it — all 8 contract cases pass. The
+contract's entry drafts now reference real categories (a real DB enforces the
+FK). A real-client integration test is registered but skipped unless
+`SUPABASE_TEST_URL` and `SUPABASE_TEST_KEY` are set, so the default run never
+touches the network. lint + typecheck + test (169, 1 skipped) + build +
+`ui:audit` pass.
+
+## Supabase Phase 5 — Data behavior
+`lib/data/query-keys.ts` centralises the query keys and invalidation, and
+`lib/data/mutations.ts` turns every write into optimistic TanStack Query
+options: `onMutate` patches categories/entries/running-timer, `onError`
+restores the previous cache and calls the error notifier (wired to Sonner's
+`toast.error` in `components/data-hooks.ts`), and `onSettled` invalidates the
+affected queries. Undo re-inserts the deleted row with its original id
+(`restoreEntry`, 23505 treated as already-restored for Postgres idempotency).
+The timer is optimistic too, so the tab title and top-bar indicator update
+immediately; `stopTimer` still goes through `stop_timer`. Window-focus
+refetching is on in `DataProvider`.
+
+`tests/mutations.test.ts` drives the option builders with TanStack's
+`MutationObserver` (no React): a failed create rolls the entry back and toasts
+the message, a failed category delete rolls back categories + entries + timer,
+undo restores the same id, and timer start/stop runs through the fake Supabase
+repository. lint + typecheck + test (172, 1 skipped) + build + `ui:audit` pass.
+
+## Supabase Phase 6 — Local-to-cloud migration and settings
+`lib/data/migration.ts` maps local ids to **deterministic UUIDs**
+(`toCloudId`, FNV-1a → RFC-4122 v4 shape; real uuids are preserved) and
+rewrites entry/timer references through the same map, so importing twice
+produces identical rows rather than duplicates. `hasMigratableData` /
+`isCloudEmpty` describe when the offer applies, and `migrateLocalData` writes
+through the active repository. `lib/data/local-store.ts` is a cached
+`useSyncExternalStore` view of the pre-sign-in `localStorage` snapshot.
+
+`components/LocalDataMigration.tsx` (mounted in the shell) offers, once the
+cloud account is loaded and empty, to import N entries / M categories; on
+success it offers to clear the local copy. `components/AccountCard.tsx` shows
+the signed-in email and Sign out on the Settings page (`useSignOut` is now
+shared with `AccountMenu`). Export/Import and Reset already flow through
+`useAppData` → the active repository, so Reset only deletes the signed-in
+user's rows (RLS); theme and time format stay local. The fake Supabase client
+now models per-user RLS so scope can be asserted.
+
+Tests: `tests/migration.test.ts` covers id stability/shape, consistent
+references, idempotent double-import, the offer predicates, and that one
+user's reset leaves another user's rows untouched. lint + typecheck + test
+(177, 1 skipped) + build + `ui:audit` pass.
+
+## Supabase Phase 7 — Hardening
+`npm run build` now runs `npm run check:secrets` first. `scripts/check-secrets.ts`
+walks the repository (skipping `node_modules`, `.next`, `.git`, `.test-build`,
+`.pi`, `.agent`, build artifacts and every `.env*` file so no credential is ever
+read) and fails if `service_role`, `sb_secret_` or `SUPABASE_SERVICE` appears;
+the needles are assembled from fragments so the checker never matches itself.
+The one literal mention that used to be in `supabase/README.md` was reworded to
+"private server key".
+
+`ui:audit` gained a fourth fixture state, `error`, which seeds unreadable
+`localStorage` so the `StorageErrorBanner` recovery UI renders on every route;
+that surfaced a latent dark/light contrast failure on its reset button, which
+now uses an outline destructive style (`border-destructive/40 text-destructive`,
+`hover:bg-destructive/10`). The audit now covers 6 routes × 3 widths × 2 themes
+× 4 states = 288 captures with 0 problems (loading skeletons are exercised while
+each page settles). The root `README.md` links a "Supabase setup" section
+(project + publishable key, env vars, applying the migration, auth redirect
+URLs) and points at `supabase/README.md`.
+
+## Supabase — final state
+All seven phases are complete. `npm run verify` (lint + typecheck + test +
+build-with-check:secrets) passes with 177 tests (1 optional integration test
+skipped without `SUPABASE_TEST_URL`/`SUPABASE_TEST_KEY`); `npm run check:rls`,
+`npm run check:secrets` and `npm run ui:audit` (288 captures, 0 problems) pass.
+With no Supabase env vars the app runs entirely on the localStorage backend;
+`.env.local` was never read or edited, no command contacted a remote database
+or Supabase project, and no git commits were made. `git diff` confirms
+`lib/storage.ts` and `tests/storage.test.ts` are unchanged, and the pure
+functions in `lib/` kept their signatures and behaviour.

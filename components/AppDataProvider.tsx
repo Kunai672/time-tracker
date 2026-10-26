@@ -1,49 +1,24 @@
 "use client";
 
 /**
- * Client-only data provider. It is the single bridge between React and the
- * storage layer: components call the actions here, the actions call pure
- * business functions from `lib/`, and only `lib/storage.ts` persists.
+ * Domain-facing data provider.
  *
- * State lives in the storage module's external store and is read with
- * `useSyncExternalStore`, so server rendering uses a stable default snapshot
- * and the browser loads from localStorage without a hydration mismatch.
+ * It composes the TanStack Query hooks in `data-hooks.ts` into the single
+ * `useAppData()` surface the UI already uses: the current `AppData`, a
+ * `ready` flag for skeletons, an error surface, and the action functions.
+ * Validation stays synchronous so forms keep their immediate feedback; the
+ * actual writes go through the active repository.
  */
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
-import {
-  createDefaultData,
-  getServerSnapshot,
-  getSnapshot,
-  subscribe,
-  writeData,
-  type StorageStatus,
-} from "../lib/storage";
-import {
-  createCategory,
-  deleteCategory,
-  recolorCategory,
-  renameCategory,
-} from "../lib/categories";
-import {
-  createEntry,
-  deleteEntry,
-  restoreEntry,
-  updateEntry,
-} from "../lib/entries";
-import { newId } from "../lib/ids";
-import {
-  defaultClock,
-  startTimerWithDescription,
-  stopTimer,
-} from "../lib/timer";
+import { createDefaultData } from "../lib/storage";
+import { SCHEMA_VERSION } from "../lib/constants";
 import {
   validateCategoryInput,
   validateCategoryName,
@@ -52,12 +27,31 @@ import {
   type TimeEntryInput,
 } from "../lib/validation";
 import type { ActionResult, AppData, TimeEntry } from "../lib/types";
+import {
+  useCategoriesQuery,
+  useCreateCategoryMutation,
+  useCreateEntryMutation,
+  useDeleteCategoryMutation,
+  useDeleteEntryMutation,
+  useEntriesQuery,
+  useImportAllMutation,
+  useRestoreEntryMutation,
+  useRunningTimerQuery,
+  useStartTimerMutation,
+  useStopTimerMutation,
+  useStorageStatusQuery,
+  useUpdateCategoryMutation,
+  useUpdateEntryMutation,
+} from "./data-hooks";
 
 export type AppDataContextValue = {
   data: AppData;
   ready: boolean;
   /** `"corrupt"` when stored data could not be read, so pages can recover. */
-  storageStatus: StorageStatus;
+  storageStatus: "ok" | "empty" | "corrupt";
+  /** First query error, so the shell can show a retry state. */
+  error: Error | null;
+  refetchAll: () => void;
   createCategoryAction: (draft: { name: string; color: string }) => ActionResult;
   renameCategoryAction: (id: string, name: string) => ActionResult;
   recolorCategoryAction: (id: string, color: string) => ActionResult;
@@ -75,131 +69,137 @@ export type AppDataContextValue = {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const { data, ready, status } = snapshot;
+  const categoriesQuery = useCategoriesQuery();
+  const entriesQuery = useEntriesQuery();
+  const timerQuery = useRunningTimerQuery();
+  const statusQuery = useStorageStatusQuery();
 
-  const commit = useCallback((updater: (current: AppData) => AppData) => {
-    writeData(updater(getSnapshot().data));
-  }, []);
+  const createCategoryMutation = useCreateCategoryMutation();
+  const updateCategoryMutation = useUpdateCategoryMutation();
+  const deleteCategoryMutation = useDeleteCategoryMutation();
+  const createEntryMutation = useCreateEntryMutation();
+  const updateEntryMutation = useUpdateEntryMutation();
+  const deleteEntryMutation = useDeleteEntryMutation();
+  const restoreEntryMutation = useRestoreEntryMutation();
+  const startTimerMutation = useStartTimerMutation();
+  const stopTimerMutation = useStopTimerMutation();
+  const importAllMutation = useImportAllMutation();
+
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const entries = useMemo(() => entriesQuery.data ?? [], [entriesQuery.data]);
+  const runningTimer = timerQuery.data ?? null;
+  const ready =
+    categoriesQuery.isSuccess &&
+    entriesQuery.isSuccess &&
+    timerQuery.isSuccess;
+
+  const data = useMemo<AppData>(
+    () => ({ version: SCHEMA_VERSION, categories, entries, runningTimer }),
+    [categories, entries, runningTimer],
+  );
+
+  const error =
+    categoriesQuery.error ??
+    entriesQuery.error ??
+    timerQuery.error ??
+    statusQuery.error ??
+    null;
+
+  const refetchAll = useCallback(() => {
+    void categoriesQuery.refetch();
+    void entriesQuery.refetch();
+    void timerQuery.refetch();
+    void statusQuery.refetch();
+  }, [categoriesQuery, entriesQuery, timerQuery, statusQuery]);
 
   const value = useMemo<AppDataContextValue>(
     () => ({
       data,
       ready,
-      storageStatus: status,
+      storageStatus: statusQuery.data ?? "ok",
+      error,
+      refetchAll,
 
       createCategoryAction(draft) {
         const result = validateCategoryInput(draft);
         if (!result.ok) return result;
-        commit((state) => ({
-          ...state,
-          categories: createCategory(state.categories, result.value, newId("cat")),
-        }));
+        createCategoryMutation.mutate(result.value);
         return { ok: true };
       },
 
       renameCategoryAction(id, name) {
-        const error = validateCategoryName(name);
-        if (error) return { ok: false, errors: [error] };
-        commit((state) => ({
-          ...state,
-          categories: renameCategory(state.categories, id, name),
-        }));
+        const errorMessage = validateCategoryName(name);
+        if (errorMessage) return { ok: false, errors: [errorMessage] };
+        updateCategoryMutation.mutate({ id, patch: { name } });
         return { ok: true };
       },
 
       recolorCategoryAction(id, color) {
-        const error = validateColor(color);
-        if (error) return { ok: false, errors: [error] };
-        commit((state) => ({
-          ...state,
-          categories: recolorCategory(state.categories, id, color),
-        }));
+        const errorMessage = validateColor(color);
+        if (errorMessage) return { ok: false, errors: [errorMessage] };
+        updateCategoryMutation.mutate({ id, patch: { color } });
         return { ok: true };
       },
 
       deleteCategoryAction(id) {
-        commit((state) => {
-          const result = deleteCategory(state.categories, state.entries, id);
-          const runningTimer =
-            state.runningTimer?.categoryId === id ? null : state.runningTimer;
-          return {
-            ...state,
-            categories: result.categories,
-            entries: result.entries,
-            runningTimer,
-          };
-        });
+        deleteCategoryMutation.mutate(id);
       },
 
       createEntryAction(draft) {
         const result = validateTimeEntryInput(draft);
         if (!result.ok) return result;
-        commit((state) => ({
-          ...state,
-          entries: createEntry(state.entries, result.value, newId("entry")),
-        }));
+        createEntryMutation.mutate(result.value);
         return { ok: true };
       },
 
       updateEntryAction(id, draft) {
         const result = validateTimeEntryInput(draft);
         if (!result.ok) return result;
-        commit((state) => ({
-          ...state,
-          entries: updateEntry(state.entries, id, result.value),
-        }));
+        updateEntryMutation.mutate({ id, draft: result.value });
         return { ok: true };
       },
 
       deleteEntryAction(id) {
-        commit((state) => ({ ...state, entries: deleteEntry(state.entries, id) }));
+        deleteEntryMutation.mutate(id);
       },
 
       restoreEntryAction(entry) {
-        commit((state) => ({
-          ...state,
-          entries: restoreEntry(state.entries, entry),
-        }));
+        restoreEntryMutation.mutate(entry);
       },
 
       startTimerAction(categoryId, description = "") {
-        commit((state) => ({
-          ...state,
-          runningTimer: startTimerWithDescription(
-            categoryId,
-            defaultClock(),
-            description,
-          ),
-        }));
+        startTimerMutation.mutate({ categoryId, description });
       },
 
       stopTimerAction(description) {
-        commit((state) => {
-          const result = stopTimer(
-            state.entries,
-            state.runningTimer,
-            defaultClock(),
-            newId("entry"),
-            description,
-          );
-          return {
-            ...state,
-            entries: result.entries,
-            runningTimer: result.timer,
-          };
-        });
+        stopTimerMutation.mutate({ description });
       },
 
       replaceDataAction(next) {
-        commit(() => next);
+        importAllMutation.mutate(next);
       },
 
       resetAction() {
-        commit(() => createDefaultData());
+        importAllMutation.mutate(createDefaultData());
       },
     }),
-    [commit, data, ready, status],
+    [
+      data,
+      ready,
+      statusQuery.data,
+      error,
+      refetchAll,
+      createCategoryMutation,
+      updateCategoryMutation,
+      deleteCategoryMutation,
+      createEntryMutation,
+      updateEntryMutation,
+      deleteEntryMutation,
+      restoreEntryMutation,
+      startTimerMutation,
+      stopTimerMutation,
+      importAllMutation,
+    ],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

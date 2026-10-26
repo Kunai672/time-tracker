@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run check:secrets && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test \".test-build/tests/**/*.test.js\"",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
+    "check:rls": "node --experimental-strip-types scripts/check-rls.ts",
+    "check:secrets": "node --experimental-strip-types scripts/check-secrets.ts",
     "ui:audit": "node --experimental-strip-types scripts/ui-audit.ts",
     "screenshots": "node --experimental-strip-types scripts/screenshots.ts"
   },

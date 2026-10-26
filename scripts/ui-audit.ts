@@ -50,6 +50,9 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const OUT_DIR = path.join(process.cwd(), ".agent", "screenshots");
 const INDEX_FILE = path.join(OUT_DIR, "INDEX.md");
 const STORAGE_KEY = "time-tracker";
+// Mirrors BACKEND_OVERRIDE_STORAGE_KEY in lib/config.ts (imported at runtime
+// by the app). Kept literal here so this strip-types script stays dependency-free.
+const BACKEND_OVERRIDE_STORAGE_KEY = "time-tracker-backend";
 
 /** Primary routes. `/data` and `/reports` are redirects and render no UI. */
 const PAGES = [
@@ -57,6 +60,8 @@ const PAGES = [
   { name: "entries", route: "/entries" },
   { name: "categories", route: "/categories" },
   { name: "settings", route: "/settings" },
+  { name: "login", route: "/login" },
+  { name: "signup", route: "/signup" },
 ] as const;
 
 const VIEWPORTS = [
@@ -66,7 +71,7 @@ const VIEWPORTS = [
 ] as const;
 
 const THEMES = ["light", "dark"] as const;
-const STATES = ["seeded", "empty", "running-timer"] as const;
+const STATES = ["seeded", "empty", "running-timer", "error"] as const;
 
 type StateName = (typeof STATES)[number];
 
@@ -179,7 +184,14 @@ function startServer(): ChildProcess {
   const nextBin = path.join(process.cwd(), "node_modules", ".bin", "next");
   return spawn(nextBin, ["start", "-p", String(PORT)], {
     stdio: "ignore",
-    env: { ...process.env, PORT: String(PORT) },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      // The audit always exercises the local backend, so it must never read or
+      // contact a Supabase project even when .env.local defines one. This
+      // runtime-only flag is not loaded from .env files, so it always wins.
+      TIME_TRACKER_BACKEND: "local",
+    },
   });
 }
 
@@ -385,10 +397,17 @@ async function auditCombination(
 
   const fixture = buildFixture(state);
   await context.addInitScript(
-    ({ key, value }) => {
+    ({ key, value, backendKey }) => {
       window.localStorage.setItem(key, value);
+      // Force local data so the audit never calls Supabase.
+      window.localStorage.setItem(backendKey, "local");
     },
-    { key: STORAGE_KEY, value: JSON.stringify(fixture) },
+    {
+      key: STORAGE_KEY,
+      // The `error` state seeds unreadable data so the recovery banner renders.
+      value: state === "error" ? "{ not valid json" : JSON.stringify(fixture),
+      backendKey: BACKEND_OVERRIDE_STORAGE_KEY,
+    },
   );
 
   const page = await context.newPage();

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { AppDataProvider } from "../components/AppDataProvider";
+import { DataProvider } from "../components/DataProvider";
 import { AppShell } from "../components/AppShell";
 import { SettingsProvider } from "../components/SettingsProvider";
 import { ThemeProvider } from "../components/theme-provider";
@@ -39,11 +40,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full bg-background text-foreground">
         <ThemeProvider>
-          <SettingsProvider>
-            <AppDataProvider>
-              <AppShell>{children}</AppShell>
-            </AppDataProvider>
-          </SettingsProvider>
+          <DataProvider>
+            <SettingsProvider>
+              <AppDataProvider>
+                <AppShell>{children}</AppShell>
+              </AppDataProvider>
+            </SettingsProvider>
+          </DataProvider>
           <Toaster position="bottom-center" />
         </ThemeProvider>
       </body>

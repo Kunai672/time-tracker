@@ -8,11 +8,14 @@ import { TimerIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, isActivePath, pageTitle } from "./nav-items";
 import { StorageErrorBanner } from "./StorageErrorBanner";
+import { DataErrorBanner } from "./DataErrorBanner";
 import { ThemeToggle } from "./ThemeToggle";
 import { RunningTimerIndicator } from "./RunningTimerIndicator";
+import { AccountMenu } from "./AccountMenu";
 import { useAppData } from "./AppDataProvider";
 import { DocumentTitle } from "./DocumentTitle";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
+import { LocalDataMigration } from "./LocalDataMigration";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 function Brand() {
@@ -38,12 +41,13 @@ function Brand() {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { storageStatus, resetAction } = useAppData();
+  const { storageStatus, resetAction, error, refetchAll } = useAppData();
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
       <DocumentTitle />
       <KeyboardShortcuts />
+      <LocalDataMigration />
 
       <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-border bg-sidebar md:flex md:w-16 lg:w-60">
         <div className="flex h-14 shrink-0 items-center border-b border-border px-2 lg:px-3">
@@ -94,11 +98,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2">
             <RunningTimerIndicator />
             <ThemeToggle />
+            <AccountMenu />
           </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-6 md:pb-10">
           <StorageErrorBanner status={storageStatus} onReset={resetAction} />
+          <DataErrorBanner error={error} onRetry={refetchAll} />
           {children}
         </main>
       </div>

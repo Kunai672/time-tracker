@@ -41,9 +41,9 @@ export function StorageErrorBanner({
       </div>
       <Button
         type="button"
-        variant="destructive"
+        variant="outline"
         onClick={onReset}
-        className="shrink-0"
+        className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10"
       >
         <RotateCcwIcon data-icon="inline-start" aria-hidden />
         Reset data
