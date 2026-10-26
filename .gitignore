@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.test-build
 
 # next.js
 /.next/
@@ -39,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent files
+.agent
+.pi
+
+# env files
+.env.local
+.env*.local
+
+# supabase
+supabase/.temp

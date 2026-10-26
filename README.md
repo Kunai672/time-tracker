@@ -20,6 +20,39 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Supabase setup
+
+The app works out of the box with no configuration: with no Supabase env vars
+set, every page reads and writes the local `localStorage` backend.
+
+To enable cloud persistence and email/password auth:
+
+1. **Create a project** at <https://supabase.com/dashboard> and, in
+   **Project Settings → API**, copy the **Project URL** and the
+   **publishable key**. Use only the publishable key — never a private server
+   key.
+2. **Set the env vars** in `.env.local` (see `.env.example`):
+
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
+   ```
+
+   With both set the app uses Supabase; otherwise it falls back to local.
+3. **Apply the migration** in `supabase/migrations/0001_init.sql` with
+   `supabase link --project-ref <ref> && supabase db push`, or by pasting the
+   file into the dashboard SQL editor. It creates the tables, indexes,
+   row-level-security policies and the atomic `stop_timer` function. Verify it
+   statically with `npm run check:rls`.
+4. **Configure auth URLs** in **Authentication → URL Configuration**: set the
+   Site URL and allow `<origin>/auth/callback` and `<origin>/auth/confirm` as
+   redirect URLs.
+
+Full details, including the RLS model, are in
+[`supabase/README.md`](supabase/README.md). The `npm run build` step runs
+`check:secrets`, which fails if a privileged Supabase credential keyword ever
+appears in the repository.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

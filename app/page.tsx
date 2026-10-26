@@ -1,69 +1,165 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+
+import { useAppData } from "../components/AppDataProvider";
+import { useSettings } from "../components/SettingsProvider";
+import { CategoryChart } from "../components/CategoryChart";
+import { DailyChart } from "../components/DailyChart";
+import { StatCards, StatCardsSkeleton } from "../components/StatCards";
+import { TimerCard } from "../components/TimerCard";
+import { WelcomeCard } from "../components/WelcomeCard";
+import { aggregateByCategory } from "../lib/aggregate";
+import { Skeleton } from "../components/ui/skeleton";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { findCategory } from "../lib/categories";
+import { formatTime } from "../lib/datetime";
+import { formatDuration } from "../lib/duration";
+import { sortEntriesNewestFirst } from "../lib/entries";
+import { buildSampleData, isFirstRun } from "../lib/sampleData";
+import { computeDashboardStats } from "../lib/stats";
+import { useNowSeconds } from "../components/useNow";
+
+function RecentEntries() {
+  const { data } = useAppData();
+  const { settings } = useSettings();
+  const hour12 = settings.timeFormat === "12h";
+  const recent = sortEntriesNewestFirst(data.entries).slice(0, 5);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <Card>
+      <CardHeader>
+        <CardTitle>Recent entries</CardTitle>
+        <CardAction>
+          <Link
+            href="/entries"
+            className="inline-flex min-h-10 items-center rounded text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            View all
+          </Link>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        {recent.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No entries yet. Start a timer to see it here.
           </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {recent.map((entry) => {
+              const category = findCategory(data.categories, entry.categoryId);
+              return (
+                <li
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: category?.color }}
+                      aria-hidden
+                    />
+                    <span className="truncate">{entry.description}</span>
+                    <span className="hidden shrink-0 text-muted-foreground sm:inline">
+                      {category?.name ?? "Uncategorized"}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3 tabular-nums">
+                    <span className="hidden text-muted-foreground md:inline">
+                      {formatTime(entry.start, hour12)} –{" "}
+                      {formatTime(entry.end, hour12)}
+                    </span>
+                    <span>{formatDuration(entry.durationMinutes)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function DashboardPage() {
+  const { data, ready, replaceDataAction } = useAppData();
+  const seconds = useNowSeconds(ready);
+  const now = seconds !== null ? new Date(seconds * 1000) : null;
+  const firstRun = ready && isFirstRun(data);
+
+  const stats = now
+    ? computeDashboardStats(data.entries, data.categories, now)
+    : null;
+  const byCategory = now
+    ? aggregateByCategory(data.entries, data.categories)
+    : [];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-heading text-title font-semibold tracking-tight">
+          Dashboard
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Track your time and review how the week is going.
+        </p>
+      </div>
+
+      {!ready || !now || !stats ? (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-36" />
+            </CardContent>
+          </Card>
+          <StatCardsSkeleton />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      ) : firstRun ? (
+        <WelcomeCard
+          onLoadSample={() => replaceDataAction(buildSampleData(new Date()))}
+        />
+      ) : (
+        <>
+          <TimerCard />
+          <StatCards stats={stats} />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Time per day</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <DailyChart
+                  entries={data.entries}
+                  categories={data.categories}
+                  now={now}
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Time per category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CategoryChart data={byCategory} />
+              </CardContent>
+            </Card>
+          </div>
+
+          <RecentEntries />
+        </>
+      )}
     </div>
   );
 }
