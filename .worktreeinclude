@@ -1,0 +1,3 @@
+# Seeds the gitignored public Supabase client env file into every fresh
+# worktree. Add only non-privileged files here.
+.env.local
